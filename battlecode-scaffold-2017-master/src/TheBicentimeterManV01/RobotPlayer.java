@@ -38,6 +38,7 @@ public strictfp class RobotPlayer {
         System.out.println("I'm an archon!");
         int numGardners = 0;
         int deisredNumGardners = 7;
+        int buildTurn = 0;
         // The code you want your robot to perform every round should be in this loop
         while (true) {
 
@@ -63,23 +64,65 @@ public strictfp class RobotPlayer {
             	{
             		dir = rc.getLocation().directionTo(enemyArchons[0]);
             	}
+            	//TODO spawn alternating 50 degree each side
+            	if (rc.isBuildReady() && rc.hasRobotBuildRequirements(RobotType.GARDENER))
+            	{
+	                switch (buildTurn) {
+	                case 0:
+	                    //infront
+	                	if (hireGardener(dir))
+	                	{
+	                		break;
+	                	}
+	                case 1:
+	                	//left 50
+	                	if (hireGardener(dir.rotateLeftDegrees(50)))
+	                	{
+	                		break;
+	                	}
+	                case 2:
+	                	//right 50
+	                	if (hireGardener(dir.rotateRightDegrees(50)))
+	                	{
+	                		break;
+	                	}
+	                case 3:
+	                	//left 100
+	                	if (hireGardener(dir.rotateLeftDegrees(100)))
+	                	{
+	                		break;
+	                	}
+	                case 4:
+	                	//right 100
+	                	if (hireGardener(dir.rotateRightDegrees(100)))
+	                	{
+	                		break;
+	                	}
+	                case 5:
+	                	//left 150
+	                	if (hireGardener(dir.rotateLeftDegrees(150)))
+	                	{
+	                		break;
+	                	}
+	                case 6:
+	                	//right 150
+	                	if (hireGardener(dir.rotateRightDegrees(150)))
+	                	{
+	                		break;
+	                	}
+	                	buildTurn = 0;
+	                	break;
+	                }
+	                buildTurn++;
+            	}
+                	
+            		
             	
             	if (rc.isCircleOccupiedExceptByThisRobot(rc.getLocation().add(dir, 2), 2))
             	{
             		dir = randomDirection();
             	}
                 
-
-                
-                //build gardeners
-                
-                if (rc.canHireGardener(dir) && (rc.getRobotCount() < deisredNumGardners*2)) {//*2 allows for lumberjacks+gardner combo
-                    //if(rc.getTeamBullets() > RobotType.LUMBERJACK.bulletCost+RobotType.GARDENER.bulletCost)//meant to give a chance to make lumberjacks if we are hard up for cash
-                    {
-	                	rc.hireGardener(dir);
-	                    numGardners++;
-                    }
-                }
 
                 // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
                 Clock.yield();
@@ -91,6 +134,15 @@ public strictfp class RobotPlayer {
         }
     }
 
+    //hires a gardener in a direction
+    //returns true if gardener was hired
+	private static boolean hireGardener(Direction dir) throws GameActionException {
+        if (rc.canHireGardener(dir)) {
+            	rc.hireGardener(dir);
+            	return true;
+        }
+		return false;
+	}
 	static void runGardener() throws GameActionException {
         //System.out.println("I'm a gardener!");
     	Team enemy = rc.getTeam().opponent();
@@ -190,21 +242,7 @@ public strictfp class RobotPlayer {
             		buildDirections[i] = buildDirection;
                 	buildDirection = buildDirection.rotateLeftDegrees(60);//60 degrees apart
                 }
-                /*
-                for (int i = 0; i<6 ;i++)//now we check that the spots are 'treeable'
-                {
-                	//check that its a valid tree spot?
-                	//rc.setIndicatorDot(rc.getLocation().add(buildDirection, 3), 255, 255, 255);
-                	if (!(rc.isCircleOccupied(rc.getLocation().add(buildDirection, 3), 1)))//  ||   rc.canInteractWithTree(rc.getLocation().add(buildDirection, 2))     )
-                	{
-                		canBuildHere = true;//we can build here, or there is already a tree here, continue
 
-                	}else
-                	{
-                		canBuildHere = false;//we CANT build here
-                		break;//and break loop so a valid spot doesnt flag the whole area as plantable
-                	}
-                }*/
                 canBuildHere = true;
                 if(begunBuilding)//if we started building here, then we already vetted the spot
                 {
@@ -213,84 +251,60 @@ public strictfp class RobotPlayer {
                 {
                 	canBuildHere = false;
                 }
-                //RobotInfo[] hotBotsInMyArea = rc.senseNearbyRobots(7, friendly);//i dont want my tree farms to clog up the whole map
                 
-                //move a little away from the archon
-                if(  !canBuildHere || howOldIAm < 2)        //   rc.getLocation().distanceTo(ArchonStartingLoc) < 8 ||
+                //move logic goes here
+                if(  !canBuildHere || howOldIAm < 3) //if we cant build here, or we are too young
                 {
                 	if(!begunBuilding)//if we would normally move, but have already made trees, just wait this turn, and try again next turn
                 	{
-                		if (pathfindingTurn == 0)//3 turn 'memory' of what direction we are moving, helps to get around obsticles
+                		//System.out.println("Still Looking");
+                		
+                		if (!(moveLastTurnDir == null))//if i had to go around something
                 		{
-		                	//move away from the edge of the map
-		                	if (!(rc.onTheMap(rc.getLocation().add(Direction.getNorth(), 2))))//check for north edge
-		        			{
-		        				tryMove(moveLastTurnDir = awayFromTarget(rc.getLocation(), rc.getLocation().add(Direction.getNorth(),4)));
-		        			}
-		                	else if (!(rc.onTheMap(rc.getLocation().add(Direction.getEast(), 2))))//east edge(go west life is peaceful there)
-		                	{
-		                		tryMove(moveLastTurnDir = awayFromTarget(rc.getLocation(), rc.getLocation().add(Direction.getEast(),4)));
-		                	}
-		                	else if (!(rc.onTheMap(rc.getLocation().add(Direction.getSouth(), 2))))//south edge
-		                	{
-		                		tryMove(moveLastTurnDir = awayFromTarget(rc.getLocation(), rc.getLocation().add(Direction.getSouth(),4)));
-		                	}
-		                	else if (!(rc.onTheMap(rc.getLocation().add(Direction.getWest(), 2))))//west edge
-		                	{
-		                		tryMove(moveLastTurnDir = awayFromTarget(rc.getLocation(), rc.getLocation().add(Direction.getWest(),4)));
-		                	}else if(friendlyRobots.length>0 && (rc.getLocation().distanceTo(ArchonStartingLoc)) > 1)//arbitary distances from starting archon for smoothest dispersion of econ
-		                	{ //if far enough from the map edge, move away from arhcon and from other gardners
-		                		tryMove(moveLastTurnDir = awayFromTarget(rc.getLocation(),friendlyRobots[0].getLocation()));
-		                	}else if (!(tryMove(moveLastTurnDir = awayFromTarget(rc.getLocation(),ArchonStartingLoc))))
-		                	{
-		                		//tryMove(randomDirection());
-		                	}
-		                	canBuildHere = false;
-		                	pathfindingTurn++;
-                		}else //we already picked a direction, lets go again
+                			//System.out.println("trying again");
+                			rc.setIndicatorLine(rc.getLocation(), rc.getLocation().add(moveLastTurnDir), 0, 0, 255);//this turn
+                			//just try and go that way again
+                			moveLastTurnDir = moveAround(moveLastTurnDir);
+                			//moveLastTurnDir = null;//set it back to nothing so we move away normally next turn
+                		}else if(rc.getLocation().distanceTo(ArchonStartingLoc) < 2)//arbitary distance to archon
                 		{
-
-                     		
-                			if (!(moveLastTurnDir == null))
+                			//System.out.println("Away from archon");
+                			Direction awayFromArchon = awayFromTarget(rc.getLocation(),ArchonStartingLoc);
+                			if(rc.canMove(awayFromArchon))
                 			{
-                				//rc.isCircleOccupiedExceptByThisRobot(rc.getLocation().add(dir, 2), 2))
-                				if (rc.isCircleOccupiedExceptByThisRobot(rc.getLocation().add(moveLastTurnDir, 2), 2))
-                				{
-                					for (int i = 1; i <360; i++)
-                					{
-                						if (rc.isCircleOccupiedExceptByThisRobot(rc.getLocation().add(moveLastTurnDir.rotateLeftDegrees(i*21), 2), 2))
-                						{
-                							System.out.println("i moved "+i);
-                							pathfindingTurn = 0;
-                							tryMove(moveLastTurnDir.rotateLeftDegrees(i*21));
-                							break;
-                						}
-                					}
-                				}
-                				//tryMove(moveLastTurnDir);
-                				rc.setIndicatorLine(rc.getLocation(), rc.getLocation().add(moveLastTurnDir), 255, 255, 255);
-                				pathfindingTurn++;
-                				if (pathfindingTurn == 3){
-                					pathfindingTurn = 0;
-                					if ( rc.canPlantTree(moveLastTurnDir.opposite()))
-                                    {
-                                 		//rc.plantTree(moveLastTurnDir.opposite());
-                                    }
-
-                					//System.out.println("Pathfinding");
-                				}
-                         		if (rc.canBuildRobot(RobotType.LUMBERJACK, moveLastTurnDir.opposite()) && rc.isBuildReady()) {
-                         			rc.buildRobot(RobotType.LUMBERJACK, moveLastTurnDir.opposite());
-                         		}
+                				rc.move(awayFromArchon);
                 			}else
                 			{
-                				//System.out.println("random");
-                				tryMove(randomDirection());//if our move logic fails, random
+                				//avoidance code
+                				//System.out.println("Trying avoidance");
+                				moveLastTurnDir = moveAround(awayFromArchon);
                 			}
+                		}else if (friendlyRobots.length>0)//if there are other bots nearby
+                		{
+                			//System.out.println("away from friendlies");
+                			Direction awayFromFriendlies = awayFromTarget(rc.getLocation(),friendlyRobots[0].getLocation());
+                			if(rc.canMove(awayFromFriendlies))
+                			{
+                				rc.move(awayFromFriendlies);
+                			}
+                			else
+                			{
+                				//System.out.println("Trying avoidance");
+                				//avoidance code
+                				//tryMove(awayFromFriendlies);
+                				moveLastTurnDir = moveAround(awayFromFriendlies);
+                			}
+                		}else
+                		{
+                			//System.out.println("why cant I move");
                 		}
                 	}
+	                canBuildHere = false;//redundant?
+	           
                 }else
                 {
+             		begunBuilding = true;
+             		//System.out.println("Ive chosen a spot");
                 	//build 5 trees around me, then pump out combat units
                 	for(int i = 0;i<6;i++)
                 	{
@@ -305,7 +319,6 @@ public strictfp class RobotPlayer {
                      	}else if ( rc.canPlantTree(buildDirections[i]))
                         {
                      		rc.plantTree(buildDirections[i]);
-                     		begunBuilding = true;
                         }
                 	}
                 	TreeInfo[] treesIBuilt = rc.senseNearbyTrees(1, rc.getTeam());
@@ -323,6 +336,20 @@ public strictfp class RobotPlayer {
                 		}
                 	}
                 }
+                //TODO try to build a lumberjack here, if i havent built anything this turn yet, i might not have space, to make a spance making bot
+                if (rc.hasRobotBuildRequirements(RobotType.LUMBERJACK))//mainly checking for bullets
+                {
+                	for (int i = 0;i<100;i++)
+                	{
+                		if(rc.canBuildRobot(RobotType.LUMBERJACK, buildDirection))
+                		{
+                			rc.buildRobot(RobotType.LUMBERJACK, buildDirection);
+                		}else
+                		{
+                			buildDirection = buildDirection.rotateLeftDegrees(i*21);
+                		}
+                	}
+                }
                 // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
                 howOldIAm++;
                 Clock.yield();
@@ -335,7 +362,33 @@ public strictfp class RobotPlayer {
     }
 
 
-    private static Direction awayFromTarget(MapLocation myLoc, MapLocation targetLoc) {
+    private static Direction moveAround(Direction desiredDir) throws GameActionException {
+     	if (rc.isCircleOccupiedExceptByThisRobot(rc.getLocation().add(desiredDir, 2), 1) || !rc.onTheMap(rc.getLocation().add(desiredDir, 2), 2))
+		{
+			for (int i = 1; i <360; i++)
+			{
+				rc.setIndicatorDot(rc.getLocation().add(desiredDir, 2), 255, 0, 0);
+				rc.setIndicatorLine(rc.getLocation(), rc.getLocation().add(desiredDir), 255, 0, 0);//this turn
+		        if (rc.canMove(desiredDir))
+		        {
+		            rc.move(desiredDir);
+		            return desiredDir;
+		        }else
+		        {
+		            desiredDir = desiredDir.rotateLeftDegrees(i*21);//rotate for the next attempt
+					//tryMove(moveLastTurnDir.rotateLeftDegrees(i*21));
+				}
+			}
+		}
+     	else
+     	{
+     		tryMove(desiredDir);
+     		return desiredDir;
+     	}
+     	//System.out.println("in all the confusion i forgot to move");
+     	return desiredDir;
+	}
+	private static Direction awayFromTarget(MapLocation myLoc, MapLocation targetLoc) {
     	Direction myArchon = new Direction(myLoc,targetLoc);
     	return myArchon.opposite();
 	}
@@ -393,6 +446,7 @@ public strictfp class RobotPlayer {
                     rc.strike();
                 } else {
                     // No close robots, so search for robots within sight radius
+                	System.out.println("nothing to melee, how about something to run at");
                     robots = rc.senseNearbyRobots(-1,enemy);
 
                     // If there is a robot, move towards it
@@ -405,33 +459,44 @@ public strictfp class RobotPlayer {
                         rc.strike();//and swing incase they are hinding behind something
                     } else {
                         // no Robots in sight, check for trees
-                        TreeInfo[] trees = rc.senseNearbyTrees(rc.getType().strideRadius, Team.NEUTRAL);//chopping range
+                    	System.out.println("about to look for trees");
+                        TreeInfo[] trees = rc.senseNearbyTrees(GameConstants.LUMBERJACK_STRIKE_RADIUS, Team.NEUTRAL);//chopping range
                      	if (!(trees.length > 0))//if there arent any neutral trees
                     	{
-                    		trees = rc.senseNearbyTrees(rc.getType().strideRadius, rc.getTeam().opponent());//find some enemy trees
+                    		trees = rc.senseNearbyTrees(GameConstants.LUMBERJACK_STRIKE_RADIUS, rc.getTeam().opponent());//find some enemy trees
                     	}
+                     	if (trees.length > 0)
+                     	{
+                     		System.out.println("I found atleast 1 tree, now what?");
+                     	}
                         if(trees.length > 0 && !rc.hasAttacked())
                         {
                         	//if there are trees
+                        	System.out.println("I'm a lumberjack! but trees are hard");
                         	if(rc.canChop(trees[0].getLocation()))
                         	{
+                        		System.out.println("chop chop");
                         		rc.chop(trees[0].getLocation());
                         	}
                         }
                         else
                         {
+                        	System.out.println("guess im not in range, just point me at 'em");
                             trees = rc.senseNearbyTrees(-1, Team.NEUTRAL);//are there any neutral trees nearby
                         	if (!(trees.length > 0))//if there arent any neutral trees
                         	{
+                        		System.out.println("Juicy enemy trees!");
                         		trees = rc.senseNearbyTrees(-1, rc.getTeam().opponent());//find some enemy trees
                         	}
                         	
                         	if (trees.length > 0)//if there are some trees in range, we will move toward them
                         	{
+                        		System.out.println("Lets go");
                         		tryMove(rc.getLocation().directionTo(trees[0].getLocation()));
                         	}else //since there are no enemys, or trees in range, lets explore
                         	{
                         		//lets try moving away from nearest friendly
+                        		System.out.println("lets play hide and seek");
                         		RobotInfo[] friendlyRobots = rc.senseNearbyRobots(-1, rc.getTeam());
                         		if (friendlyRobots.length > 0)
                         		{
@@ -439,7 +504,7 @@ public strictfp class RobotPlayer {
                         			
                         		}else
                         		{
-	                        		//System.out.println("I'm a lumberjack, i tried to move again");
+	                        		System.out.println("I'm a lumberjack, i tried to move again");
 	                        		//tryMove(randomDirection());//all else fails, random
                         		}
                         	}
@@ -474,7 +539,7 @@ public strictfp class RobotPlayer {
      * @throws GameActionException
      */
     static boolean tryMove(Direction dir) throws GameActionException {
-        return tryMove(dir,5,36);
+        return tryMove(dir,1,30);
     }
 
     /**
