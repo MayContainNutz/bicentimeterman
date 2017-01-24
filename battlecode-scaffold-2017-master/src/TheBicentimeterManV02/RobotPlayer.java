@@ -33,7 +33,7 @@ public strictfp class RobotPlayer {
 	public static void run(RobotController rc) throws GameActionException {
 
 		RobotPlayer.rc = rc;
-
+		
 		// switch is probably the easiest way to split operation based on robot
 		// type for a small bytecode overhead in its first turn
 		switch (rc.getType()) {
@@ -80,7 +80,7 @@ public strictfp class RobotPlayer {
 				// do we win this turn
 				checkForDonateWin();
 				// run away if we are getting shot at
-				avoidDamage();
+				//avoidDamage();
 				// build econ units if required
 				econBuild();
 
@@ -92,10 +92,15 @@ public strictfp class RobotPlayer {
 	}
 
 	private static void runScout() {
+		
+		RobotInfo currentTarget = null;
+		RobotInfo targetLastRound = null;
+		int turnsOnTarget = 0;
+		
 		while (true)// as long as we are alive, do stuff
 		{
 			try {
-				checkForDonateWin();
+				//checkForDonateWin();
 
 				// dodge damage?
 				// move away from melee/close range units
@@ -141,7 +146,25 @@ public strictfp class RobotPlayer {
 								// at the end of my turn, request help
 				pingEnemy();// locate other enemies so our other units know
 							// where to go if they arent in combat
-				attack(nearestEnemy());
+				
+				if(turnsOnTarget > 2)
+				{
+					currentTarget = null;
+					turnsOnTarget = 0;
+				}
+				if(currentTarget == null)
+				{
+					currentTarget = nearestEnemy();
+				}else
+				{
+					targetLastRound = currentTarget;
+					currentTarget = findTarget(currentTarget.getID());
+					turnsOnTarget++;
+				}
+				//System.out.println("turnsOnTarget "+turnsOnTarget );
+				attack(currentTarget,targetLastRound);
+				
+				//attack(nearestEnemy());
 				RobotInfo[] nearbyRobots = rc.senseNearbyRobots(-1, rc.getTeam());
 				if (nearbyRobots.length > 0) {
 					MapLocation nearestFriendly = nearbyRobots[0].getLocation();
@@ -181,7 +204,7 @@ public strictfp class RobotPlayer {
 				// listen for target pinging and head towards
 				MapLocation pingedEnemy = getPingedEnemy();
 				if (pingedEnemy != null) {
-					moveToward(pingedEnemy);
+					//moveToward(pingedEnemy);//dont bother, just chop out our area
 				}
 				TreeInfo[] nearbyTrees = rc.senseNearbyTrees(-1, rc.getTeam().opponent());
 				MapLocation nearestTree = null;
@@ -217,9 +240,11 @@ public strictfp class RobotPlayer {
 	}
 
 	private static void runSoldier() {
+		
 		RobotInfo currentTarget = null;
 		RobotInfo targetLastRound = null;
 		int turnsOnTarget = 0;
+		
 		while (true)// as long as we are alive, do stuff
 		{
 			try {
@@ -242,6 +267,7 @@ public strictfp class RobotPlayer {
 				}
 				//just call attack?
 				//i only want to get a new enemy every x turns, probably 3
+				//System.out.println("step 1, have i selected a target " + currentTarget + " " + targetLastRound);
 				if(turnsOnTarget > 2)
 				{
 					currentTarget = null;
@@ -250,15 +276,25 @@ public strictfp class RobotPlayer {
 				if(currentTarget == null)
 				{
 					currentTarget = nearestEnemy();
+					if(currentTarget == null)//if theres no enemy
+					{
+						targetLastRound = null;//dont try to extrapolate its position
+					}
 				}else
 				{
 					targetLastRound = currentTarget;
 					currentTarget = findTarget(currentTarget.getID());
-					turnsOnTarget++;
+					if(currentTarget != null)//if we found it again
+					{
+						turnsOnTarget++;//track our turns on this target
+					}else
+					{
+						targetLastRound = null;//if its gone, null its previous pos
+					}
 				}
-				
+				//System.out.println("step 1, have i selected a target " + currentTarget + " " + targetLastRound);
 				attack(currentTarget,targetLastRound);
-				
+				//attack(nearestEnemy());
 				RobotInfo[] nearbyRobots = rc.senseNearbyRobots(-1, rc.getTeam());
 				if (nearbyRobots.length > 0) {
 					MapLocation nearestFriendly = nearbyRobots[0].getLocation();
@@ -331,12 +367,38 @@ public strictfp class RobotPlayer {
 
 	private static void attack(RobotInfo currentTarget, RobotInfo targetLastRound) throws GameActionException {
 		// TODO Auto-generated method stub
-		if(targetLastRound == null)
+		//Theta = sin^-1 (V(r) x V(b) x y^2)
+		//Theta = cos^-1 (V(r) x V(b) x x^2)
+		//System.out.println("step 2, i want to shoot at " + currentTarget + " " + targetLastRound);
+		if(currentTarget == null)
 		{
-			attack(currentTarget);
 			return;
 		}
-		attack(currentTarget);	
+		if(targetLastRound == null)
+		{
+			attack(currentTarget.getLocation());
+			return;
+		}
+		
+		float ourBulletSpeed = rc.getType().bulletSpeed;
+		float enemySpeed = currentTarget.getLocation().distanceTo(targetLastRound.getLocation());
+		float distanceToEnemy = rc.getLocation().distanceTo(currentTarget.getLocation());
+		float numbersAreSilly = ourBulletSpeed * enemySpeed * distanceToEnemy *distanceToEnemy;
+		//TODO work out how to do theta with museli
+		//double theta = Math.asin(ourBulletSpeed * enemySpeed * distanceToEnemy *distanceToEnemy);
+		
+		//System.out.println("mathy " + ourBulletSpeed +" "+ enemySpeed +" "+ distanceToEnemy +" "+theta +" "+numbersAreSilly);
+		Direction toTarget = rc.getLocation().directionTo(currentTarget.getLocation());
+		//Direction predictedDirection = toTarget.rotateLeftDegrees((float) theta);
+		Direction targetsPredictedMove = targetLastRound.getLocation().directionTo(currentTarget.getLocation());
+		//rc.setIndicatorLine(rc.getLocation(), rc.getLocation().add(toTarget, 3), 255, 255, 255);
+		//rc.setIndicatorLine(currentTarget.getLocation(), currentTarget.getLocation().add(targetsPredictedMove,3), 0, 255, 0);
+		//rc.setIndicatorLine(rc.getLocation(), rc.getLocation().add(predictedDirection,3), 255, 0, 0);
+		//rc.setIndicatorDot(rc.getLocation().add(predictedDirection), 0, 0, 0);
+		
+		//attack(rc.getLocation().add(predictedDirection));
+		//rc.setIndicatorLine(rc.getLocation(), currentTarget.getLocation(), 255, 0, 0);
+		attack(currentTarget);
 	}
 
 	private static RobotInfo findTarget(int id) throws GameActionException {
@@ -356,34 +418,42 @@ public strictfp class RobotPlayer {
 		attack(nearestEnemy.getLocation());
 	}
 	// general attack for all bots, passed an enemy
-	private static void attack(MapLocation nearestEnemy) throws GameActionException {
+	private static boolean attack(MapLocation nearestEnemy) throws GameActionException {
 		// figure out what we are, and thus what attacks we have available
 		// check target is within range
 		// check that nothing will block the shot
 		// strike or shoot
-		//Theta = sin^-1 (V(r) x V(b) x y^2)
-		//Theta = cos^-1 (V(r) x V(b) x x^2)
-
+		/*
+		if(!rc.canSenseLocation(nearestEnemy))
+		{
+			return false;
+		}
+		*/
 		if (nearestEnemy == null)// if no nearest enemy, it will be null
 		{
-			return;// so we bail out early
+			return false;// so we bail out early
 		}
+		
 		if (rc.canStrike()) {
 			rc.strike();
-			return;
+			return true;
 		}
+		//System.out.println("I'm trying to shoot");
 		if (rc.canFirePentadShot() && canShoot(nearestEnemy, 5)) {
 			rc.firePentadShot(rc.getLocation().directionTo(nearestEnemy));
-			return;
+			return true;
 		}
+		
 		if (rc.canFireTriadShot() && canShoot(nearestEnemy, 3)) {
 			rc.fireTriadShot(rc.getLocation().directionTo(nearestEnemy));
-			return;
+			return true;
 		}
+		
 		if (rc.canFireSingleShot() && canShoot(nearestEnemy, 1)) {
 			rc.fireSingleShot(rc.getLocation().directionTo(nearestEnemy));
-			return;
+			return true;
 		}
+		return false;
 	}
 
 	private static boolean canShoot( MapLocation target, int numShots) throws GameActionException {
@@ -392,7 +462,7 @@ public strictfp class RobotPlayer {
 				rc.getLocation().distanceTo(target) - (2),
 				rc.getType().sensorRadius - 1);
 		Direction targetDirection = rc.getLocation().directionTo(target);
-		float checkSize = (float) 0.2 * numShots;//size of the check that we have a clear shot
+		float checkSize = (float) 0.3 * numShots;//size of the check that we have a clear shot
 		if (distanceToTarget <= rc.getType().bodyRadius + 1) {
 			return true;
 		}
@@ -402,7 +472,7 @@ public strictfp class RobotPlayer {
 			// shoot
 			// rc.setIndicatorDot(me.getLocation().add(targetDirection,
 			// i),0,0,0);
-
+			
 			if (rc.isCircleOccupiedExceptByThisRobot(rc.getLocation().add(targetDirection, i), checkSize)) {
 				// found something
 				return false;
@@ -616,18 +686,21 @@ public strictfp class RobotPlayer {
 	}
 
 	private static RobotType[] buildListGenerate() {
-		RobotType[] buildOrder = new RobotType[5];
+		RobotType[] buildOrder = new RobotType[6];
 		buildOrder[0] = RobotType.SCOUT;
 		buildOrder[1] = RobotType.SOLDIER;
 		buildOrder[2] = RobotType.LUMBERJACK;
-		buildOrder[3] = RobotType.SOLDIER;
+		buildOrder[3] = RobotType.LUMBERJACK;
 		buildOrder[4] = RobotType.SOLDIER;
+		buildOrder[5] = RobotType.SOLDIER;
 		return buildOrder;
 	}
 
 	private static boolean findBuildSite() throws GameActionException {
 		// TODO gardener farm location picking needs a rework, new spot
 		// choosing, or at least pathfinding
+		
+
 		// be aware of where friendly robots are
 		RobotInfo[] friendlyRobots = rc.senseNearbyRobots(-1, rc.getTeam());
 		RobotInfo friendlyGardener = null;
@@ -640,6 +713,9 @@ public strictfp class RobotPlayer {
 																// it
 				return false;// return false to keep looking for a spot
 			}
+		}
+		for (int i = 0; i < friendlyRobots.length; i++)
+		{
 			if (friendlyRobots[i].getType() == RobotType.GARDENER && friendlyGardener == null) {
 				// this time its a friendly robot in the way
 				friendlyGardener = friendlyRobots[i];
@@ -647,6 +723,7 @@ public strictfp class RobotPlayer {
 				return false;
 			}
 		}
+
 		// lets get a little further way from the edge, so things can path bast
 		// us
 		int distanceFromEdge = 5;
@@ -694,7 +771,7 @@ public strictfp class RobotPlayer {
 	// move away from lumberjacks and bullets(heatmap?)
 	// TODO better bullet dodging
 	private static void avoidDamage() throws GameActionException {
-		BulletInfo[] bullets = rc.senseNearbyBullets(5);
+		BulletInfo[] bullets = rc.senseNearbyBullets();
 		if (bullets.length > 0) {
 			// if there are bullets, at least try to avoid them a little
 			for (int i = 0; i < bullets.length; i++) {
@@ -743,7 +820,7 @@ public strictfp class RobotPlayer {
 
 			}
 		}
-		RobotInfo[] robots = rc.senseNearbyRobots(4);// i actually want ALL this
+		RobotInfo[] robots = rc.senseNearbyRobots(5);// i actually want ALL this
 														// time, not just
 														// enemies, but i only
 														// want to be out of
@@ -791,7 +868,7 @@ public strictfp class RobotPlayer {
 		}
 		if (rc.isCircleOccupiedExceptByThisRobot(rc.getLocation().add(dir, 2), 1)
 				|| !rc.onTheMap(rc.getLocation().add(dir, 2), 2)) {
-			for (int i = 1; i < 17; i++) {
+			for (int i = 1; i < 100; i++) {
 				// rc.setIndicatorDot(rc.getLocation().add(desiredDir, 2), 255,
 				// 0, 0);
 				// rc.setIndicatorLine(rc.getLocation(),
