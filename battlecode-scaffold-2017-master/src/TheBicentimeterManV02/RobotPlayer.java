@@ -110,9 +110,12 @@ public strictfp class RobotPlayer {
 
 				// dodge damage?
 				// move away from melee/close range units
-				avoidDamage();
+				//avoidDamage();
+				dodgeBullets();
+				// shake trees
+				shakeTrees();
+				
 				// go to help our gardeners
-
 				MapLocation distressedGardener = findDistressedEcon();
 				if (distressedGardener != null) {
 					moveToward(distressedGardener);
@@ -134,9 +137,7 @@ public strictfp class RobotPlayer {
 				 * getPingedEnemy(); if(pingedTarget != null) {
 				 * moveToward(pingedTarget); }
 				 */
-				// shake trees, either on your way, or if you have nothing
-				// better to do
-				shakeTrees();
+
 				// visit the starting location of the enemy archon
 				MapLocation enemyArchonStart = rc.getInitialArchonLocations(rc.getTeam().opponent())[0];
 				// pick the first, its just a general area to start the search
@@ -242,7 +243,7 @@ public strictfp class RobotPlayer {
 						partMove(rc.getLocation().directionTo(nearestTree));//lets just edge in, so others can get past us
 					}
 					
-					rc.setIndicatorDot(nearestTree, 255, 0, 0);
+					//rc.setIndicatorDot(nearestTree, 255, 0, 0);
 					chopTrees(nearestTree);// chop trees if any in range
 				}
 				else
@@ -360,7 +361,7 @@ public strictfp class RobotPlayer {
 				// build trees
 				econBuild(established);
 				// build combat units
-				//warBuild(established);
+				warBuild(established);
 
 				Clock.yield();// ends this turn
 			} catch (GameActionException e) {
@@ -377,7 +378,7 @@ public strictfp class RobotPlayer {
 		float currBullets = rc.getTeamBullets();
 		if((currCost * toWin) <= currBullets)
 		{
-			System.out.println("Can I win? " + currCost + " " + currBullets);
+			//System.out.println("Can I win? " + currCost + " " + currBullets);
 			rc.donate(currCost * toWin);
 		}
     	if (rc.getRoundNum() > rc.getRoundLimit()-2 )//check for last round 1 and 0 indexed :/
@@ -794,7 +795,7 @@ public strictfp class RobotPlayer {
 	private static boolean findBuildSite() throws GameActionException {
 		// TODO gardener farm location picking needs a rework, new spot
 		// choosing, or at least pathfinding
-		rc.setIndicatorLine(rc.getLocation(), rc.getLocation().add(decidedDir), 255, 0, 0);
+		//rc.setIndicatorLine(rc.getLocation(), rc.getLocation().add(decidedDir), 255, 0, 0);
 		if(rc.getRoundNum() % 5 == 0)
 		{
 			decidedDir = null;
@@ -897,6 +898,172 @@ public strictfp class RobotPlayer {
 		}
 	}
 
+	private static void dodgeBullets() throws GameActionException
+	{
+		//do I want to alternate sides?
+		//start toward the nearest enemy
+		BulletInfo[] bullets = rc.senseNearbyBullets(-1);
+		if(bullets.length == 0)
+		{
+			return;
+		}
+		System.out.println("Bullets " + bullets.length );
+		Direction toNearestEnemy = Direction.getNorth();//start facing north
+		RobotInfo nearestEnemy = nearestEnemy();
+		if(nearestEnemy != null)//if there is an enemy, lets start with getting closer
+		{
+			toNearestEnemy = rc.getLocation().directionTo(nearestEnemy.getLocation());
+		}
+		
+		for(int i = 0; i<20;i++)//check everywhere around me
+		{
+			boolean safeDodge = true;
+			MapLocation testDodge = rc.getLocation().add(toNearestEnemy.rotateLeftDegrees(i*19), rc.getType().strideRadius);
+			//rc.setIndicatorDot(testDodge, red, green, blue);
+			rc.setIndicatorDot(testDodge, 0, 0, 255);
+			//if the enemy is within 1 turn of bullet movement, we wont be able to dodge
+			if(nearestEnemy != null && testDodge.distanceTo(nearestEnemy.getLocation()) <= nearestEnemy.getType().bulletSpeed+nearestEnemy.getType().bodyRadius+rc.getType().bodyRadius)
+			{
+				safeDodge = false;
+				continue;//skips the rest of this check, since we alredy know we dont want to be there
+			}
+			for(BulletInfo b:bullets)
+			{
+				
+				//distance from the propesed move to the bullets CURRENT location
+				float dist = testDodge.distanceTo(b.getLocation());
+				//the direction from the bullet to the proposed location
+				Direction bulletToMe = b.getLocation().directionTo(testDodge);
+				//theta is the angle between the direction the bullet is travelling and the direction to us
+				float theta = bulletToMe.degreesBetween(b.getDir());
+				//dist to bullet * cos(angle of bullet) = the shortest distance between us and the bullet
+				float minDistFromBullet = (float) (dist * Math.sin(theta));
+				if(minDistFromBullet <= rc.getType().bodyRadius && minDistFromBullet >= 0-rc.getType().bodyRadius)
+				{
+					//if its on course to hit me
+					//distance bullet travels to hit me
+					float bulletDistance = b.speed;
+					float bulletDistanceToHit = (float)(dist * Math.cos(theta));
+					if(bulletDistanceToHit <= bulletDistance && bulletDistanceToHit >= 0- bulletDistance)
+					{
+						
+						System.out.println("DO WE HIT" + minDistFromBullet +" "+ rc.getType().bodyRadius );
+						rc.setIndicatorLine(b.getLocation(), b.getLocation().add(b.dir, b.speed), 255, 0, 0);
+						//we would get hit if we went here
+						safeDodge = false;
+						break;//no point checking the rest of the bullets
+					}
+				}
+
+			}
+			if(!safeDodge)
+			{
+				continue;//already flagged, skip to the next spot
+			}
+			if(!rc.onTheMap(testDodge, rc.getType().bodyRadius))
+			{
+				safeDodge = false;
+				continue;//if its not on the map, we cant dodge there. NEXT
+			}
+			if(safeDodge)
+			{
+				//heres our spot
+				if(rc.canMove(testDodge) && !rc.hasMoved())//will be true if we can move there
+				{
+					System.out.println("Dodged i hope");
+					rc.setIndicatorDot(testDodge, 0, 0, 255);
+					rc.move(testDodge);
+					return;
+				}
+			}
+		}
+		System.out.println("Somehow I didnt dodge");
+	}
+	private static void dodgeBullets2() throws GameActionException
+	{
+		//so
+		//get all bullets in 2 turns range
+		BulletInfo[] bullets = rc.senseNearbyBullets(4);//4 = speed of tank bullets
+		//pick a spot thats out of direct line for the first
+		if(bullets.length<1)
+		{
+			return;
+		}
+		for(BulletInfo b:bullets)
+		{
+			int bulletsThatHitHere = 0;
+			Direction dirToMe = b.getLocation().directionTo(rc.getLocation());
+			Direction bullettravel = b.getDir();
+			if (dirToMe.degreesBetween(bullettravel) < 45 && dirToMe.degreesBetween(bullettravel) > 0)
+			{
+				//pick a spot, rotate right
+				Direction dirToAvoid = dirToMe.rotateRightDegrees(90);
+				MapLocation dodge = rc.getLocation().add(dirToAvoid, rc.getType().strideRadius);
+				//rc.setIndicatorDot(dodge, 0, 0, 255);
+				for(BulletInfo oB:bullets)//now check all of the bullets to see if they hit us
+				{
+					float dist = dodge.distanceTo(oB.getLocation());
+					Direction bulletToMe = oB.getLocation().directionTo(dodge);
+					float theta = bulletToMe.degreesBetween(oB.getDir());
+					float minDistFromBullet = (float) (dist * Math.cos(theta));
+					//System.out.println("DO WE HIT" + minDistFromBullet +" "+ rc.getType().bodyRadius );
+					if(minDistFromBullet <= rc.getType().bodyRadius && minDistFromBullet >= 0-rc.getType().bodyRadius)
+					{
+						//rc.setIndicatorLine(oB.getLocation(), oB.getLocation().add(bullettravel, oB.speed), 255, 0, 0);
+						//System.out.println("Thats a hit");
+						bulletsThatHitHere++;
+						
+					}
+				}
+				if(bulletsThatHitHere == 0)
+				{
+					//heres our spot
+					if(rc.canMove(dodge) && !rc.hasMoved())
+					{
+						System.out.println("Dodged");
+						rc.move(dodge);
+						break;
+					}
+				}
+				bulletsThatHitHere = 0;//reset variable for use in next loop
+				
+			}else if (dirToMe.degreesBetween(bullettravel) < -1 && dirToMe.degreesBetween(bullettravel) > -45)
+			{
+				//pick a spot, rotate left
+				Direction dirToAvoid = dirToMe.rotateLeftDegrees(90);
+				MapLocation dodge = rc.getLocation().add(dirToAvoid, rc.getType().strideRadius);
+				for(BulletInfo oB:bullets)//now check all of the bullets to see if they hit us
+				{
+					float dist = dodge.distanceTo(oB.getLocation());
+					Direction bulletToMe = oB.getLocation().directionTo(dodge);
+					float theta = bulletToMe.degreesBetween(oB.getDir());
+					float minDistFromBullet = (float) (dist * Math.cos(theta));
+					//System.out.println("DO WE HIT" + minDistFromBullet +" "+ rc.getType().bodyRadius );
+					if(minDistFromBullet <= rc.getType().bodyRadius && minDistFromBullet >= 0-rc.getType().bodyRadius)
+					{
+						//System.out.println("Thats a hit");
+						//rc.setIndicatorDot(dodge, 0, 127, 127);
+						//rc.setIndicatorLine(oB.getLocation(), oB.getLocation().add(bullettravel, oB.speed), 0, 255, 0);
+						bulletsThatHitHere++;
+					}
+				}
+				if(bulletsThatHitHere == 0)
+				{
+					//heres our spot
+					if(rc.canMove(dodge) && !rc.hasMoved())
+					{
+						System.out.println("Dodged");
+						rc.move(dodge);
+						break;
+					}
+				}
+				bulletsThatHitHere = 0;//done with this var, so reset
+			}
+		}
+		//check that no bullet intersects this point
+		//if it does, pick the next bullet to dodge
+		//if we run out of bullets to move at 90 degrees, move away from the largest concentration?
+	}
 	private static void avoidDamage() throws GameActionException
 	{
 		//for all bullets closeby
@@ -910,8 +1077,8 @@ public strictfp class RobotPlayer {
 		BulletInfo[] bullets = rc.senseNearbyBullets();//not actually sorted by distance from me
 		if (bullets.length > 0) {
 			for (int i = 0; i < bullets.length; i++) {
-				rc.setIndicatorLine(bullets[i].getLocation(),
-						bullets[i].getLocation().add(bullets[i].dir, bullets[i].speed), 0, 0, 0);
+				//rc.setIndicatorLine(bullets[i].getLocation(),
+						//bullets[i].getLocation().add(bullets[i].dir, bullets[i].speed), 0, 0, 0);
 				Direction dirToMe = bullets[i].getLocation().directionTo(rc.getLocation());
 				Direction bullettravel = bullets[i].getDir();
 				if(bullets[i].getLocation().add(bullettravel, bullets[i].getSpeed()).distanceTo(rc.getLocation()) < rc.getType().bodyRadius)
@@ -920,7 +1087,7 @@ public strictfp class RobotPlayer {
 	
 						Direction dirToAvoid = dirToMe.rotateRightDegrees(90);
 						MapLocation dodge = rc.getLocation().add(dirToAvoid, rc.getType().strideRadius);
-						rc.setIndicatorDot(dodge, 255, 0, 0);
+						//rc.setIndicatorDot(dodge, 255, 0, 0);
 						if(rc.canMove(dodge) && !rc.hasMoved())
 						{
 							rc.move(dodge);
@@ -934,7 +1101,7 @@ public strictfp class RobotPlayer {
 								//bullets[i].getLocation(), 0, 0, 0);
 						Direction dirToAvoid = dirToMe.rotateLeftDegrees(90);
 						MapLocation dodge = rc.getLocation().add(dirToAvoid, rc.getType().strideRadius);
-						rc.setIndicatorDot(dodge, 255, 0, 0);
+						//rc.setIndicatorDot(dodge, 255, 0, 0);
 						if(rc.canMove(dodge) && !rc.hasMoved())
 						{
 							rc.move(dodge);
