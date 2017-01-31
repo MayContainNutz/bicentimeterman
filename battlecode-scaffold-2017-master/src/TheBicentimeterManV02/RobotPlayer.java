@@ -65,11 +65,63 @@ public strictfp class RobotPlayer {
 	}
 
 	private static void runTank() {
+		
+		RobotInfo currentTarget = null;
+		RobotInfo targetLastRound = null;
+		int turnsOnTarget = 0;
 		while (true)// as long as we are alive, do stuff
 		{
 			try {
-				// TODO makes tanks do stuff
 				checkForDonateWin();
+				// shoot at stuff if appropriate
+				// ping enemies
+				pingEnemy();
+				// avoid stuff
+				avoidDamage();
+				// listen for ping
+				// go to help our gardeners
+				MapLocation distressedGardener = findDistressedEcon();
+				if (distressedGardener != null) {
+					moveToward(distressedGardener);
+				}
+				MapLocation pingedEnemy = getPingedEnemy();
+				if (pingedEnemy != null) {
+					// move towards ping
+					moveToward(pingedEnemy);
+				}
+				//just call attack?
+				//i only want to get a new enemy every x turns, probably 3
+				//System.out.println("step 1, have i selected a target " + currentTarget + " " + targetLastRound);
+				if(turnsOnTarget > 2)
+				{
+					currentTarget = null;
+					turnsOnTarget = 0;
+				}
+				if(currentTarget == null)
+				{
+					currentTarget = nearestEnemy();
+					if(currentTarget == null)//if theres no enemy
+					{
+						targetLastRound = null;//dont try to extrapolate its position
+					}
+				}else
+				{
+					targetLastRound = currentTarget;
+					currentTarget = findTarget(currentTarget.getID());
+					if(currentTarget != null)//if we found it again
+					{
+						turnsOnTarget++;//track our turns on this target
+					}else
+					{
+						targetLastRound = null;//if its gone, null its previous pos
+					}
+				}
+				//System.out.println("step 1, have i selected a target " + currentTarget + " " + targetLastRound);
+				attack(currentTarget,targetLastRound);
+				//attack(nearestEnemy());
+				//charge toward the enemy archon
+				//smash trees along the way
+				
 				Clock.yield();// ends this turn
 			} catch (GameActionException e) {
 				e.printStackTrace();
@@ -120,7 +172,7 @@ public strictfp class RobotPlayer {
 				if (distressedGardener != null) {
 					moveToward(distressedGardener);
 				}
-
+				/*
 				// move toward nearest gardener
 				MapLocation nearestGardener = nearestEnemyGardener();
 				if (nearestGardener != null) {
@@ -131,6 +183,7 @@ public strictfp class RobotPlayer {
 				if (pingedGardener != null) {
 					moveToward(pingedGardener);
 				}
+				*/
 				/*
 				 * //if no other gardeners location is known, try to engage
 				 * regular combat units MapLocation pingedTarget =
@@ -199,20 +252,7 @@ public strictfp class RobotPlayer {
 				pingEnemy();
 
 				
-				// get nearest enemy
-				RobotInfo nearestEnemy = nearestEnemy();
-				// hit things if they are in range
-				if (nearestEnemy != null) {
-					avoidDamage();
-					attack(nearestEnemy);// nots sure about this
-					// move toward things i can see
-					moveToward(nearestEnemy.getLocation());
-				}
-				// go to help our gardeners
-				MapLocation distressedGardener = findDistressedEcon();
-				if (distressedGardener != null) {
-					moveToward(distressedGardener);
-				}
+
 				/*
 				// listen for target pinging and head towards
 				MapLocation pingedEnemy = getPingedEnemy();
@@ -220,6 +260,8 @@ public strictfp class RobotPlayer {
 					//moveToward(pingedEnemy);//dont bother, just chop out our area
 				}
 				*/
+				// get nearest enemy
+				RobotInfo nearestEnemy = nearestEnemy();
 				TreeInfo[] nearbyTrees = rc.senseNearbyTrees(-1, rc.getTeam().opponent());
 				MapLocation nearestTree = null;
 				if (nearbyTrees.length > 0) {
@@ -248,12 +290,25 @@ public strictfp class RobotPlayer {
 				}
 				else
 				{
+					// hit things if they are in range
+					if (nearestEnemy != null) {
+						//avoidDamage();
+						// move toward things i can see
+						moveToward(nearestEnemy.getLocation());
+					}
+					// go to help our gardeners
+					MapLocation distressedGardener = findDistressedEcon();
+					if (distressedGardener != null) {
+						moveToward(distressedGardener);
+					}
 	            	MapLocation[] enemyArchons = rc.getInitialArchonLocations(rc.getTeam().opponent());
 	            	//Direction targetArchon = rc.getLocation().directionTo(enemyArchons[0]);
 	            	moveToward(enemyArchons[0]);
 				}
 				// TODO explore/search
-				
+
+				//hit things if they are near
+				attack(nearestEnemy);// nots sure about this
 				//for now, we will head towards an enemy archon
             	//MapLocation[] enemyArchons = rc.getInitialArchonLocations(rc.getTeam().opponent());
             	//Direction targetArchon = rc.getLocation().directionTo(enemyArchons[0]);
@@ -353,15 +408,19 @@ public strictfp class RobotPlayer {
 							// danger pings
 				buildOrder = getBuildList();
 				waterTrees();
+
 				// find a spot to build
 				if (!established)// if we already have a spot, dont bother
 				{
 					established = findBuildSite();
 				}
-				// build trees
-				econBuild(established);
 				// build combat units
 				warBuild(established);
+				if(rc.getRoundNum() >50)//give us a chance to get off the scout solder combo to start with
+				{
+					// build trees
+					econBuild(established);
+				}
 
 				Clock.yield();// ends this turn
 			} catch (GameActionException e) {
@@ -545,7 +604,8 @@ public strictfp class RobotPlayer {
 		int currGardeners = getCurrGardeners();
 		Direction dir = rc.getLocation().directionTo(rc.getInitialArchonLocations(rc.getTeam().opponent())[0]);
 		int minBullets = 0;
-		if(currGardeners > 1 && (rc.getRobotCount() < 5 || currGardeners < 3))//helps get the early game combat units built, to stop rushes
+		TreeInfo[] trees = rc.senseNearbyTrees(-1,Team.NEUTRAL);
+		if(currGardeners >= 1 && (rc.getRobotCount() < 7 ||  trees.length > 0 || rc.getRoundNum() < 50))//helps get the early game combat units built, to stop rushes
 		{
 			minBullets = 180;
 		}
@@ -654,7 +714,7 @@ public strictfp class RobotPlayer {
 		Direction buildDirection = rc.getLocation().directionTo(rc.getInitialArchonLocations(rc.getTeam())[0]);
 		// build a map of possible build locations
 		Direction[] buildDirections = new Direction[6];
-		buildDirection = buildDirection.rotateLeftDegrees(60);// 60 offcentre,
+		buildDirection = buildDirection.rotateLeftDegrees(180);// 60 offcentre,
 																// so the combat
 																// units come
 																// out facing
@@ -696,18 +756,18 @@ public strictfp class RobotPlayer {
 		*/
 		Direction buildDirection = rc.getLocation().directionTo(rc.getInitialArchonLocations(rc.getTeam())[0]);
 		// build a map of possible build locations
-		Direction[] buildDirections = new Direction[6];
-		buildDirection = buildDirection.rotateLeftDegrees(60);
-		for (int i = 0; i < 6; i++)// 6 spots load up the tree matrix
+		Direction[] buildDirections = new Direction[18];
+		buildDirection = buildDirection.rotateLeftDegrees(180);
+		for (int i = 0; i < 18; i++)// 6 spots load up the tree matrix
 		{
 			buildDirections[i] = buildDirection;
-			buildDirection = buildDirection.rotateLeftDegrees(60);// 60 degrees
+			buildDirection = buildDirection.rotateLeftDegrees(20);// 60 degrees
 																	// apart
 		}
 		// Direction[] buildDirections = new Direction[6];
 		// buildDirection = buildDirection.rotateLeftDegrees(60);//60 offcentre,
 		// so the combat units come out facing DIRECTLY away from the archon
-		for (int i = 0; i < 6; i++)// 6 spots load up the tree matrix
+		for (int i = 0; i < 18; i++)// 6 spots load up the tree matrix
 		{
 			// try and build in default direction
 			buildNextCombatUnit(buildDirections[i]);
@@ -737,7 +797,7 @@ public strictfp class RobotPlayer {
 		RobotType[] buildOrder = new RobotType[6];
 		buildOrder[0] = RobotType.SCOUT;
 		buildOrder[1] = RobotType.SOLDIER;
-		buildOrder[2] = RobotType.SOLDIER;
+		buildOrder[2] = RobotType.LUMBERJACK;
 		buildOrder[3] = RobotType.SOLDIER;
 		buildOrder[4] = RobotType.SOLDIER;
 		buildOrder[5] = RobotType.SOLDIER;
@@ -745,10 +805,11 @@ public strictfp class RobotPlayer {
 	}
 	
 	private static RobotType[] buildListGenerateCramped() {
-		RobotType[] buildOrder = new RobotType[3];
+		RobotType[] buildOrder = new RobotType[4];
 		buildOrder[0] = RobotType.SCOUT;
-		buildOrder[1] = RobotType.LUMBERJACK;
+		buildOrder[1] = RobotType.SOLDIER;
 		buildOrder[2] = RobotType.LUMBERJACK;
+		buildOrder[3] = RobotType.LUMBERJACK;
 		return buildOrder;
 	}
 
@@ -791,68 +852,188 @@ public strictfp class RobotPlayer {
 		}
 		
 	}
-	
 	private static boolean findBuildSite() throws GameActionException {
-		// TODO gardener farm location picking needs a rework, new spot
-		// choosing, or at least pathfinding
-		//rc.setIndicatorLine(rc.getLocation(), rc.getLocation().add(decidedDir), 255, 0, 0);
-		if(rc.getRoundNum() % 5 == 0)
+		//debug///
+		int startTimer = Clock.getBytecodeNum();
+		
+		RobotInfo[] robots = rc.senseNearbyRobots(-1);
+		TreeInfo[] trees = rc.senseNearbyTrees(-1);
+		//so i want to select all spots in view range
+		//and test their fitness based on no of obstructions and nearness
+
+		MapLocation fitnessTest = rc.getLocation();
+		Direction fitnessDirection = rc.getLocation().directionTo(rc.getInitialArchonLocations(rc.getTeam().opponent())[0]);
+		int[] firstRingFitness = new int[18];
+		//226 bytecode to here
+		//start with those spots immediately in my move range
+		for(int i = 0; i< 18;i++)
 		{
-			decidedDir = null;
+			MapLocation thisFitnessTest = fitnessTest.add(fitnessDirection.rotateLeftDegrees(i*20), 2);//30 degrees gives us 12 slots around us, 2 is 2* our body radius
+			//rc.setIndicatorDot(thisFitnessTest, 255, 255, 255);
+			if(!rc.onTheMap(thisFitnessTest))
+			{
+				firstRingFitness[i] += 10;
+			}
+			//first check for trees
+			for(RobotInfo r:robots)
+			{
+				if(thisFitnessTest.doCirclesCollide(thisFitnessTest, 1, r.getLocation(), r.getRadius()))
+				{
+					firstRingFitness[i] += 1;
+				}
+			}
+			for(TreeInfo t:trees)
+			{
+				if(thisFitnessTest.doCirclesCollide(thisFitnessTest, 1, t.getLocation(), t.getRadius()))
+				{
+					firstRingFitness[i] += 2;
+				}
+			}
 		}
-		if(decidedDir != null)
+		//next expand 'behind' each of them to see how large the 'safe' area is
+		for(int i = 0;i < 18;i++)//each of the 'first' locations
 		{
-			moveAwayFrom(rc.getLocation().add(decidedDir));
-			return false;
+
+			for(int row = 0;row< 2;row++)//2 rows deep otherwise we wind up out of view range
+			{
+				//for(int node = 0;node<row+1;node++)//node/potential mapLocation
+				{
+					//get the centre location for our wedge
+					MapLocation thisFitnessTest = fitnessTest.add(fitnessDirection.rotateLeftDegrees(i*20),2*row+4);
+					rc.setIndicatorDot(thisFitnessTest, 255, 0, 255);
+					//rc.setIndicatorDot(fitnessTest, 0, 255, 0);
+					
+					if(!rc.onTheMap(thisFitnessTest))
+					{
+						firstRingFitness[i] += 10;
+					}
+					if(!rc.canSenseAllOfCircle(thisFitnessTest, 1+1*row))
+					{
+						//System.out.println("PING i cant see that");
+						firstRingFitness[i] += 1;
+					}
+					//how to spread them out is tricky///
+					//for now, to test bytecode use
+					for(RobotInfo r:robots)
+					{
+						if(thisFitnessTest.doCirclesCollide(thisFitnessTest, 1, r.getLocation(), r.getRadius()))
+						{
+							firstRingFitness[i] += 4-row;
+						}
+
+					}
+					for(TreeInfo t:trees)
+					{
+						if(thisFitnessTest.doCirclesCollide(thisFitnessTest, 1, t.getLocation(), t.getRadius()))
+						{
+							firstRingFitness[i] += 6-2*row;
+						}
+					}
+				}
+			}
 		}
+		int lowest = 0;
+		int lowestValue = 100000;//atleast 1 should be better, right?
+		int highest = 0;
+		int highestValue = 0;
+		for(int i = 0;i<18;i++)//this time just a quick look
+		{//we want to find the smallest value, the one with the fewest obstructions
+			//System.out.println("ok, fitness check: "+ firstRingFitness[i]);
+			if(firstRingFitness[i] < lowestValue)
+			{
+				lowestValue = firstRingFitness[i];
+				lowest = i;
+			}
+			if(firstRingFitness[i]> highestValue)
+			{
+				highestValue = firstRingFitness[i];
+				highest = i;
+			}
+		}
+		//inspect each set of 4, recrod the lowest obstructions, head for the middle
+		int lowestSet = 0;
+		int lowestSetValue = 1000000;//arbitary millions are the best
+		int totalObstructions = 0;
+		for(int i = 0; i<18;i++)
+		{
+			totalObstructions += i;
+			int j = i;
+			int setFirstValue = firstRingFitness[j];
+			j++;
+			if(j > 17)
+			{
+				j= 0;
+			}
+			int setSecondValue = firstRingFitness[j];
+			j++;
+			if(j>17)
+			{
+				j=0;
+			}
+			int setThirdValue = firstRingFitness[j];
+			j++;
+			if(j>17)
+			{
+				j=0;
+			}
+			int setFourthValue = firstRingFitness[j];
+			int testValue = setFirstValue+setSecondValue+setFirstValue+setFourthValue;
+			if (testValue < lowestSetValue)
+			{
+				lowestSet = i;
+				lowestSetValue = testValue;
+			}
+		}
+		lowestSet += 1;
+		if(lowestSet > 17)
+		{
+			lowestSet -= 18;
+		}
+		if(totalObstructions == 0)
+		{
+			return true;
+		}
+		//System.out.println("fitniss whole MapLocation in my mouth: "+ highest + " "+ highestValue);
+		//MapLocation thisFitnessTest = fitnessTest.add(fitnessDirection.rotateLeftDegrees(i*30), 2);
+		//rc.setIndicatorLine(fitnessTest, fitnessTest.add(fitnessDirection.rotateLeftDegrees(30*lowestSet),4), 255, 0, 0);
+		moveToward(fitnessTest.add(fitnessDirection.rotateLeftDegrees(20*lowestSet)));
+		//moveAwayFrom(fitnessTest.add(fitnessDirection.rotateLeftDegrees(30*highest), rc.getType().strideRadius));
+		int endTimer = Clock.getBytecodeNum();
+		//System.out.println("it took: "+ (endTimer-startTimer));
+		//return false;
+		return goodBuildSite();//run the old pathfinding to see if this spot is suitable
+	}
+	private static boolean goodBuildSite() throws GameActionException {
+		//evaluates if our current location is a good spot to setup shop
 		// be aware of where friendly robots are
-		RobotInfo[] friendlyRobots = rc.senseNearbyRobots(-1, rc.getTeam());
-		RobotInfo friendlyGardener = null;
+		RobotInfo[] friendlyRobots = rc.senseNearbyRobots(4, rc.getTeam());
+		//RobotInfo friendlyGardener = null;
 
 		MapLocation friendlyArchon = null; //rc.getInitialArchonLocations(rc.getTeam())[0];
-		/*
-		if(friendlyArchon != null)
-		{
-			rc.setIndicatorLine(rc.getLocation(),friendlyArchon, 255, 0, 0);
-			moveAwayFrom(friendlyArchon);// move away from it
-			decidedDir = rc.getLocation().directionTo(friendlyArchon);
-			return false;// return false to keep looking for a spot
-		}
-		*/
 		
 		for (int i = 0; i < friendlyRobots.length; i++) {
-			if (friendlyRobots[i].getType() == RobotType.ARCHON && friendlyArchon == null) {
+			if (friendlyRobots[i].getType() == RobotType.GARDENER) {
 				// if we find an archon in range
 				//friendlyArchon = friendlyRobots[i];
 				//rc.setIndicatorLine(rc.getLocation(),friendlyRobots[i].getLocation(), 255, 0, 0);
-				moveAwayFrom(friendlyRobots[i].getLocation());// move away from it
-				decidedDir = rc.getLocation().directionTo(friendlyRobots[i].getLocation());
+				//moveAwayFrom(friendlyRobots[i].getLocation());// move away from it
+				//decidedDir = rc.getLocation().directionTo(friendlyRobots[i].getLocation());
 				return false;// return false to keep looking for a spot
 			}
+
 		}
 		
-		/*
-		for (int i = 0; i < friendlyRobots.length; i++)
+		TreeInfo[] friendlyTrees = rc.senseNearbyTrees(5, rc.getTeam());
+		if(friendlyTrees.length != 0)
 		{
-			if (friendlyRobots[i].getType() == RobotType.GARDENER && friendlyGardener == null) {
-				// this time its a friendly robot in the way
-				friendlyGardener = friendlyRobots[i];
-				moveAwayFrom(friendlyRobots[i].getLocation());
-				decidedDir = rc.getLocation().directionTo(friendlyRobots[i].getLocation());
-				return false;
-			}
-		}
-		*/
-		TreeInfo[] friendlyTrees = rc.senseNearbyTrees(-1, rc.getTeam());
-		for(TreeInfo t:friendlyTrees)
-		{
-			moveAwayFrom(t.getLocation());
+			//moveAwayFrom(t.getLocation());
 			//rc.setIndicatorLine(rc.getLocation(),t.getLocation(), 255, 0, 0);
-			decidedDir = rc.getLocation().directionTo(t.getLocation());
+			//decidedDir = rc.getLocation().directionTo(t.getLocation());
 			return false;
 		}
 		// lets get a little further way from the edge, so things can path past
 		// us
+		/*
 		int distanceFromEdge = 5;
 		Direction mapEdgeDirection = Direction.getNorth();
 		MapLocation lookingForMapEdge = rc.getLocation().add(mapEdgeDirection, distanceFromEdge);
@@ -866,7 +1047,7 @@ public strictfp class RobotPlayer {
 			// if it IS on the map, rotate and try again
 			lookingForMapEdge = rc.getLocation().add(mapEdgeDirection.rotateLeftDegrees(i * 90), distanceFromEdge);
 		}
-
+		*/
 		//rc.setIndicatorLine(rc.getLocation(), rc.getLocation().add(decidedDir), 255, 0, 0);
 		return true;// if there arent any robots that trip up in the loop, we
 					// are clear to build
@@ -907,7 +1088,7 @@ public strictfp class RobotPlayer {
 		{
 			return;
 		}
-		System.out.println("Bullets " + bullets.length );
+		//System.out.println("Bullets " + bullets.length );
 		Direction toNearestEnemy = Direction.getNorth();//start facing north
 		RobotInfo nearestEnemy = nearestEnemy();
 		if(nearestEnemy != null)//if there is an enemy, lets start with getting closer
@@ -920,7 +1101,7 @@ public strictfp class RobotPlayer {
 			boolean safeDodge = true;
 			MapLocation testDodge = rc.getLocation().add(toNearestEnemy.rotateLeftDegrees(i*19), rc.getType().strideRadius);
 			//rc.setIndicatorDot(testDodge, red, green, blue);
-			rc.setIndicatorDot(testDodge, 0, 0, 255);
+			//rc.setIndicatorDot(testDodge, 0, 0, 255);
 			//if the enemy is within 1 turn of bullet movement, we wont be able to dodge
 			if(nearestEnemy != null && testDodge.distanceTo(nearestEnemy.getLocation()) <= nearestEnemy.getType().bulletSpeed+nearestEnemy.getType().bodyRadius+rc.getType().bodyRadius)
 			{
@@ -947,8 +1128,8 @@ public strictfp class RobotPlayer {
 					if(bulletDistanceToHit <= bulletDistance && bulletDistanceToHit >= 0- bulletDistance)
 					{
 						
-						System.out.println("DO WE HIT" + minDistFromBullet +" "+ rc.getType().bodyRadius );
-						rc.setIndicatorLine(b.getLocation(), b.getLocation().add(b.dir, b.speed), 255, 0, 0);
+						//System.out.println("DO WE HIT" + minDistFromBullet +" "+ rc.getType().bodyRadius );
+						//rc.setIndicatorLine(b.getLocation(), b.getLocation().add(b.dir, b.speed), 255, 0, 0);
 						//we would get hit if we went here
 						safeDodge = false;
 						break;//no point checking the rest of the bullets
@@ -970,14 +1151,14 @@ public strictfp class RobotPlayer {
 				//heres our spot
 				if(rc.canMove(testDodge) && !rc.hasMoved())//will be true if we can move there
 				{
-					System.out.println("Dodged i hope");
-					rc.setIndicatorDot(testDodge, 0, 0, 255);
+					//System.out.println("Dodged i hope");
+					//rc.setIndicatorDot(testDodge, 0, 0, 255);
 					rc.move(testDodge);
 					return;
 				}
 			}
 		}
-		System.out.println("Somehow I didnt dodge");
+		//System.out.println("Somehow I didnt dodge");
 	}
 	private static void dodgeBullets2() throws GameActionException
 	{
